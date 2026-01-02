@@ -56,5 +56,15 @@ client.on("interactionCreate", async interaction => {
   }
 });
 
+// Keep-alive server (Railway gosta disso)
+const http = require("http");
+const port = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("OK");
+}).listen(port, () => console.log("🌐 Keep-alive on port", port));
+
+
 // 🔥 ISSO MANTÉM O BOT VIVO
 client.login(TOKEN);
+
