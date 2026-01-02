@@ -1,114 +1,82 @@
-const fs = require("fs");
-const path = require("path");
 const {
   Client,
   GatewayIntentBits,
-  REST,
-  Routes,
-  SlashCommandBuilder,
   EmbedBuilder,
-  PermissionFlagsBits
+  PermissionsBitField,
 } = require("discord.js");
 
-/* =========================
-   CONFIG VIA RAILWAY (ENV)
-========================= */
-const config = {
-  token: process.env.TOKEN,
-  clientId: process.env.CLIENT_ID,
-  guildId: process.env.GUILD_ID,
-  roleAlunoId: process.env.ROLE_ALUNO_ID,
-  channels: {
-    turmas: process.env.CHANNEL_TURMAS,
-    cursos: process.env.CHANNEL_CURSOS
-  },
-  courses: {
-    "Formação Básica PRF": process.env.CURSO_FB,
-    "Abordagem & Prisão": process.env.CURSO_AP,
-    "SAT Tático": process.env.CURSO_SAT,
-    "Operações & Blitz": process.env.CURSO_OB
-  }
-};
+require("dotenv").config();
 
-/* =========================
-   CHECK DE VARIÁVEIS
-========================= */
-const required = [
-  "TOKEN",
-  "CLIENT_ID",
-  "GUILD_ID",
-  "ROLE_ALUNO_ID",
-  "CHANNEL_TURMAS",
-  "CHANNEL_CURSOS",
-  "CURSO_FB",
-  "CURSO_AP",
-  "CURSO_SAT",
-  "CURSO_OB"
-];
-
-for (const k of required) {
-  if (!process.env[k]) {
-    console.error(`❌ Missing env var: ${k}`);
-    process.exit(1);
-  }
+if (!process.env.TOKEN) {
+  console.log("❌ TOKEN não encontrado no Railway.");
+  process.exit(1);
 }
 
-/* =========================
-   DATABASE
-========================= */
-const DB_PATH = path.join(__dirname, "database.json");
-
-function loadDB() {
-  try {
-    return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-  } catch {
-    return {
-      turmaAtual: null,
-      turmaAberta: false,
-      turmas: {},
-      alunos: {},
-      painel: { turmasMessageId: null, cursosMessageId: null }
-    };
-  }
-}
-
-function saveDB(db) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf8");
-}
-
-function nowISO() {
-  return new Date().toISOString();
-}
-
-/* =========================
-   CLIENT
-========================= */
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [GatewayIntentBits.Guilds],
 });
 
-/* =========================
-   READY
-========================= */
-client.once("ready", async () => {
-  console.log(`🤖 Bot ligado como ${client.user.tag}`);
-
-  const commands = [
-    new SlashCommandBuilder()
-      .setName("ping")
-      .setDescription("Teste do bot")
-  ].map(c => c.toJSON());
-
-  const rest = new REST({ version: "10" }).setToken(config.token);
-  await rest.put(
-    Routes.applicationGuildCommands(config.clientId, config.guildId),
-    { body: commands }
-  );
-
-  console.log("✅ Slash commands registrados.");
+client.once("clientReady", () => {
+  console.log(`✅ Logado como ${client.user.tag}`);
+  client.user.setPresence({
+    activities: [{ name: "PRF • Avisos" }],
+    status: "online",
+  });
 });
 
-/* =========================
-   LOGIN
-========================= */
-client.login(config.token);
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  // /pingprf
+  if (interaction.commandName === "pingprf") {
+    return interaction.reply({
+      content: "✅ Bot PRF online!",
+      ephemeral: true,
+    });
+  }
+
+  // /aviso
+  if (interaction.commandName === "aviso") {
+    const member = interaction.member;
+
+    const allowed =
+      member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+      member.permissions.has(PermissionsBitField.Flags.ManageGuild) ||
+      member.permissions.has(PermissionsBitField.Flags.ManageMessages);
+
+    if (!allowed) {
+      return interaction.reply({
+        content: "❌ Você não tem permissão para enviar avisos.",
+        ephemeral: true,
+      });
+    }
+
+    const titulo = interaction.options.getString("titulo", true);
+    const mensagem = interaction.options.getString("mensagem", true);
+    const canalEscolhido = interaction.options.getChannel("canal");
+    const cargo = interaction.options.getRole("cargo");
+
+    const canal = canalEscolhido ?? interaction.channel;
+    const mentionText = cargo ? `<@&${cargo.id}>` : "";
+
+    // 🔷 EMBED GRANDE, LIMPO, SEM TEXTO FIXO
+    const embed = new EmbedBuilder()
+      .setColor(0x0f7ae5)
+      .setTitle(titulo)
+      .setDescription(mensagem)
+      .setFooter({ text: "PRF • Sistema de Avisos" })
+      .setTimestamp();
+
+    await canal.send({
+      content: mentionText,
+      embeds: [embed],
+    });
+
+    await interaction.reply({
+      content: `✅ Aviso enviado em ${canal}.`,
+      ephemeral: true,
+    });
+  }
+});
+
+client.login(process.env.TOKEN);
