@@ -1,99 +1,60 @@
-const fs = require("fs");
-const path = require("path");
-const {
-  Client,
-  GatewayIntentBits,
-  REST,
-  Routes,
-  SlashCommandBuilder
-} = require("discord.js");
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 
-/* =========================
-   CONFIG VIA RAILWAY (ENV)
-========================= */
-const config = {
-  token: process.env.TOKEN,
-  clientId: process.env.CLIENT_ID,
-  guildId: process.env.GUILD_ID,
-  roleAlunoId: process.env.ROLE_ALUNO_ID,
-  channels: {
-    turmas: process.env.CHANNEL_TURMAS,
-    cursos: process.env.CHANNEL_CURSOS
-  },
-  courses: {
-    "Formação Básica PRF": process.env.CURSO_FB,
-    "Abordagem & Prisão": process.env.CURSO_AP,
-    "SAT Tático": process.env.CURSO_SAT,
-    "Operações & Blitz": process.env.CURSO_OB
-  }
-};
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
-/* =========================
-   CHECK DE VARIÁVEIS
-========================= */
-const required = [
-  "TOKEN",
-  "CLIENT_ID",
-  "GUILD_ID",
-  "ROLE_ALUNO_ID",
-  "CHANNEL_TURMAS",
-  "CHANNEL_CURSOS",
-  "CURSO_FB",
-  "CURSO_AP",
-  "CURSO_SAT",
-  "CURSO_OB"
-];
-
-for (const k of required) {
-  if (!process.env[k]) {
-    console.error(`❌ Missing env var: ${k}`);
-    process.exit(1);
-  }
+if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
+  console.error("❌ Variáveis de ambiente faltando");
+  process.exit(1);
 }
 
-/* =========================
-   DATABASE (opcional)
-========================= */
-const DB_PATH = path.join(__dirname, "database.json");
-function loadDB() {
-  try {
-    return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-  } catch {
-    return {
-      turmaAtual: null,
-      turmaAberta: false,
-      turmas: {},
-      alunos: {},
-      painel: { turmasMessageId: null, cursosMessageId: null }
-    };
-  }
-}
-function saveDB(db) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf8");
-}
-
-/* =========================
-   CLIENT
-========================= */
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [GatewayIntentBits.Guilds]
 });
 
-client.once("ready", async () => {
+// ---------- SLASH COMMANDS ----------
+const commands = [
+  new SlashCommandBuilder()
+    .setName("ping")
+    .setDescription("Teste do bot"),
+
+  new SlashCommandBuilder()
+    .setName("status")
+    .setDescription("Ver status do bot")
+].map(cmd => cmd.toJSON());
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+(async () => {
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+    console.log("✅ Slash commands registrados.");
+  } catch (err) {
+    console.error("❌ Erro ao registrar comandos:", err);
+  }
+})();
+
+// ---------- BOT ONLINE ----------
+client.once("ready", () => {
   console.log(`🤖 Bot ligado como ${client.user.tag}`);
-
-  const commands = [
-    new SlashCommandBuilder().setName("ping").setDescription("Teste do bot")
-  ].map(c => c.toJSON());
-
-  const rest = new REST({ version: "10" }).setToken(config.token);
-
-  await rest.put(
-    Routes.applicationGuildCommands(config.clientId, config.guildId),
-    { body: commands }
-  );
-
-  console.log("✅ Slash commands registrados.");
 });
 
-client.login(config.token);
+// ---------- INTERACTIONS ----------
+client.on("interactionCreate", async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === "ping") {
+    await interaction.reply("🏓 Pong!");
+  }
+
+  if (interaction.commandName === "status") {
+    await interaction.reply("✅ Bot online e funcionando");
+  }
+});
+
+// 🔥 ISSO MANTÉM O BOT VIVO
+client.login(TOKEN);
